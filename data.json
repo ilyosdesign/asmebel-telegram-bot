@@ -1,0 +1,33 @@
+{
+    "kitchen": {
+        "name": "Oshxona mebellari",
+        "emoji": "🍽️",
+        "products": [
+            {
+                "id": 1783460237,
+                "photo_id": "AgACAgIAAxkBAAICFGdhVHLB...",
+                "caption": "Test mahsulot\nNarxi: 1,000,000 so'm"
+            }
+        ]
+    },
+    "bedroom": {
+        "name": "Yotoqxona mebellari",
+        "emoji": "🛏️",
+        "products": []
+    },
+    "tv_zone": {
+        "name": "TV Zonalar",
+        "emoji": "📺",
+        "products": []
+    },
+    "wardrobe": {
+        "name": "Gardiroblar",
+        "emoji": "🚪",
+        "products": []
+    },
+    "office": {
+        "name": "Ofis mebellari",
+        "emoji": "💼",
+        "products": []
+    }
+}
