@@ -10,6 +10,13 @@ import sys
 import os
 from pathlib import Path
 
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
+
 def print_status(message: str, status: bool):
     """Вывести статус проверки"""
     symbol = "✅" if status else "❌"
