@@ -18,6 +18,8 @@ from config import TELEGRAM_TOKEN, ADMIN_ID, ADMIN_USERNAME
 from gemini_handler import get_gemini_response
 from products import CATEGORIES_DATA, add_product, delete_product, edit_product, add_category, delete_category
 from faq import FAQ_DATA
+from excel_handler import save_order_to_excel
+from user_manager import add_user, get_all_user_ids
 
 # Loglashni sozlash (xatoliklarni oson topish uchun)
 logging.basicConfig(
@@ -37,6 +39,8 @@ EDIT_SELECT_CAT, EDIT_SELECT_PROD, EDIT_CHOOSE_FIELD, EDIT_GET_NEW_PHOTO, EDIT_G
 MANAGE_CATS_MENU, ADD_CAT_GET_KEY, ADD_CAT_GET_NAME, ADD_CAT_GET_EMOJI, DEL_CAT_SELECT_FOR_DEL, DEL_CAT_CONFIRM_DEL = 11, 12, 13, 14, 15, 16
 # Buyurtma berish holati
 GET_PHONE_NUMBER = 17
+# Ommaviy xabar yuborish holatlari
+GET_BROADCAST_MESSAGE, CONFIRM_BROADCAST = 18, 19
  
 # /start buyrug'iga javob beruvchi funksiya
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -44,6 +48,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Ob'ektlar None emasligini tekshirish
     if not update.message or not user:
         return
+
+    # Foydalanuvchini bazaga qo'shish
+    add_user(user.id)
 
     await update.message.reply_html(
         f"Assalomu alaykum, {user.mention_html()}! Men <b>ASMEBEL</b> do'konining virtual yordamchisiman.\n\n"
@@ -162,17 +169,23 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     await query.answer("Xatolik: Chat topilmadi.", show_alert=True)
                     return
 
-                await context.bot.send_photo(
-                    chat_id=update.effective_chat.id,
-                    photo=product_to_show['photo_id'],
-                    caption=product_to_show['caption'],
-                    reply_markup=reply_markup,
-                    parse_mode="HTML" # Tavsifda HTML ishlatish uchun
-                )
+                try:
+                    logger.info(f"Rasm jo'natishga urinish: chat_id={update.effective_chat.id}, photo_id={product_to_show.get('photo_id')}")
+                    await context.bot.send_photo(
+                        chat_id=update.effective_chat.id,
+                        photo=product_to_show['photo_id'],
+                        caption=product_to_show['caption'],
+                        reply_markup=reply_markup,
+                        parse_mode="HTML" # Tavsifda HTML ishlatish uchun
+                    )
+                except Exception as e:
+                    logger.error(f"RASM YUBORISHDA XATOLIK YUZ BERDI: {e}")
+                    await query.answer("Kechirasiz, rasm yuklashda xatolik yuz berdi.", show_alert=True)
             else:
                 await query.answer("Kechirasiz, bu mahsulot topilmadi.", show_alert=True)
-        except (ValueError, IndexError):
-            await query.answer("Xatolik yuz berdi.", show_alert=True)
+        except Exception as e:
+            logger.error(f"Mahsulotni ko'rsatishda umumiy xatolik: {e}")
+            await query.answer("Noma'lum xatolik yuz berdi.", show_alert=True)
 
 # Matnli xabarlarni Gemini'ga yuboruvchi funksiya
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -241,7 +254,8 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         [InlineKeyboardButton("➕ Mahsulot qo'shish", callback_data='add_product')],
         [InlineKeyboardButton("✏️ Mahsulotni tahrirlash", callback_data='edit_product')],
         [InlineKeyboardButton("🗑️ Mahsulotni o'chirish", callback_data='delete_product')],
-        [InlineKeyboardButton("🗂️ Kategoriyalarni boshqarish", callback_data='manage_categories')]
+        [InlineKeyboardButton("🗂️ Kategoriyalarni boshqarish", callback_data='manage_categories')],
+        [InlineKeyboardButton("📢 Xabar yuborish", callback_data='broadcast_start')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Salom, Admin! Boshqaruv panelidasiz.", reply_markup=reply_markup)
@@ -839,6 +853,10 @@ async def get_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             f"<b>Telefon:</b> <code>{phone_number}</code>"
         )
         await context.bot.send_message(chat_id=int(ADMIN_ID), text=admin_message, parse_mode="HTML")
+
+        # Excelga saqlash
+        user_info = {'id': user.id, 'username': user.username, 'full_name': user.full_name, 'phone_number': phone_number}
+        save_order_to_excel(user_info, product_name)
         
         await update.message.reply_text(
             "✅ Buyurtmangiz qabul qilindi. Tez orada administrator siz bilan bog'lanadi!",
@@ -850,16 +868,80 @@ async def get_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     context.user_data.clear()
     return ConversationHandler.END
 
+# --- Ommaviy xabar yuborish (Broadcast) ---
+
+async def broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Ommaviy xabar yuborish jarayonini boshlaydi."""
+    query = update.callback_query
+    if not query:
+        return ConversationHandler.END
+    await query.answer()
+    await query.edit_message_text(
+        "Foydalanuvchilarga yuborish uchun xabar matnini kiriting. Rasm bilan yuborish ham mumkin.\n\n"
+        "Bekor qilish uchun /cancel buyrug'ini yuboring."
+    )
+    return GET_BROADCAST_MESSAGE
+
+async def get_broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Yuboriladigan xabarni oladi va tasdiqlashni so'raydi."""
+    if not update.message or not context.user_data:
+        return GET_BROADCAST_MESSAGE
+
+    context.user_data['broadcast_message'] = update.message
+    user_count = len(get_all_user_ids())
+
+    keyboard = [
+        [InlineKeyboardButton("✅ Ha, yuborish", callback_data='confirm_broadcast')],
+        [InlineKeyboardButton("❌ Yo'q, bekor qilish", callback_data='cancel_broadcast')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        f"Ushbu xabar {user_count} ta foydalanuvchiga yuboriladi. Tasdiqlaysizmi?",
+        reply_markup=reply_markup
+    )
+    return CONFIRM_BROADCAST
+
+async def confirm_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Tasdiqlanganda xabarni barcha foydalanuvchilarga yuboradi."""
+    query = update.callback_query
+    if not query or not query.data or not context.user_data:
+        return ConversationHandler.END
+    await query.answer()
+
+    if query.data == 'cancel_broadcast':
+        await query.edit_message_text("Xabar yuborish bekor qilindi.")
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    message_to_send = context.user_data.get('broadcast_message')
+    if not message_to_send:
+        await query.edit_message_text("Xatolik: Yuboriladigan xabar topilmadi.")
+        return ConversationHandler.END
+
+    await query.edit_message_text("Xabar yuborish boshlandi... Bu biroz vaqt olishi mumkin.")
+    
+    user_ids = get_all_user_ids()
+    sent_count = 0
+    for user_id in user_ids:
+        try:
+            await context.bot.copy_message(chat_id=user_id, from_chat_id=message_to_send.chat_id, message_id=message_to_send.message_id)
+            sent_count += 1
+            await asyncio.sleep(0.1) # Telegram limitlariga tushmaslik uchun
+        except Exception as e:
+            logger.warning(f"Foydalanuvchi {user_id} ga xabar yuborib bo'lmadi: {e}")
+
+    await query.message.reply_text(f"✅ Xabar yuborish yakunlandi!\n\n{sent_count} ta foydalanuvchiga muvaffaqiyatli yuborildi.")
+    context.user_data.clear()
+    return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Joriy suhbatni bekor qiladi."""
-    if update.message:
-        message = update.message
+    message = update.message
+    if update.callback_query and update.callback_query.message:
+        await update.callback_query.edit_message_text("Amal bekor qilindi.")
+    elif message:
         await message.reply_text("Amal bekor qilindi.")
-    elif update.callback_query:
-        query = update.callback_query
-        await query.edit_message_text("Amal bekor qilindi.")
-
     if context.user_data:
         context.user_data.clear()
     return ConversationHandler.END
@@ -869,9 +951,9 @@ async def cancel_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     query = update.callback_query
     if query:
         await query.answer()
-        # Agar xabar rasm bo'lsa, uni tahrirlab bo'lmaydi, shuning uchun yangi xabar yuboramiz
-        if query.message and hasattr(query.message, 'text') and query.message.text:
-             await query.edit_message_text("Buyurtma bekor qilindi.")
+        # Agar xabar matnli bo'lsa, uni tahrirlaymiz
+        if query.message and hasattr(query.message, "text") and query.message.text:
+            await query.edit_message_text("Buyurtma bekor qilindi.")
         elif update.effective_chat:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Buyurtma bekor qilindi.", reply_markup=ReplyKeyboardRemove())
     if context.user_data:
@@ -960,12 +1042,24 @@ def main() -> None:
         per_chat=True,
     )
 
+    # Ommaviy xabar yuborish uchun ConversationHandler
+    broadcast_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(broadcast_start, pattern='^broadcast_start$')],
+        states={
+            GET_BROADCAST_MESSAGE: [MessageHandler(filters.ALL & ~filters.COMMAND, get_broadcast_message)],
+            CONFIRM_BROADCAST: [CallbackQueryHandler(confirm_broadcast, pattern='^(confirm_broadcast|cancel_broadcast)$')],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+        per_user=True,
+        per_chat=True,
+    )
     # Buyruq va xabarlarni qayd etish
     application.add_handler(add_product_conv)
     application.add_handler(delete_product_conv)
     application.add_handler(edit_product_conv)
     application.add_handler(manage_cats_conv)
     application.add_handler(order_conv)
+    application.add_handler(broadcast_conv)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("katalog", show_catalog))
     application.add_handler(CommandHandler("admin", admin_panel))
