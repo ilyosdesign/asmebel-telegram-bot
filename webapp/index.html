@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ASMEBEL Mini App</title>
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Cinzel:wght@700&display=swap" rel="stylesheet">
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Top Announcement Bar with Language Switcher -->
+    <div class="top-announcement-bar">
+      <div class="announcement-badge">
+        <span class="badge-icon">✨</span>
+        <span class="badge-text" data-i18n="top_badge">ASMEBEL Premium 3D Konstruktor</span>
+      </div>
+      <!-- Language Switcher (UZ / RU) -->
+      <div class="lang-switcher">
+        <button class="lang-btn active" id="lang-uz" onclick="setLanguage('uz')">UZ</button>
+        <button class="lang-btn" id="lang-ru" onclick="setLanguage('ru')">RU</button>
+        <button class="lang-btn" id="lang-en" onclick="setLanguage('en')">EN</button>
+        <button class="theme-toggle-btn" onclick="toggleTheme()" title="Dark/Light Mode">🌙</button>
+      </div>
+    </div>
+
+    <!-- Main Container -->
+    <main class="main-content">
+
+      <!-- ================= TAB 1: BOSH SAHIFA ================= -->
+      <section id="tab-home" class="tab-page active">
+        <!-- Header -->
+        <header class="app-header">
+          <h1 class="brand-title">ASMEBEL</h1>
+          <div class="brand-subtitle" data-i18n="home_subtitle">BOSH SAHIFA</div>
+        </header>
+
+        <!-- Home Grid Cards -->
+        <div class="home-grid">
+          <!-- Card 1: Oshxona Konstruktori -->
+          <div class="grid-card" onclick="switchTab('kitchen')">
+            <div class="card-icon-wrapper kitchen-bg">
+              <span class="card-emoji">🍳</span>
+            </div>
+            <h3 class="card-title" data-i18n="card_kitchen_title">Oshxona konstruktori</h3>
+            <p class="card-desc" data-i18n="card_kitchen_desc">Oshxona loyihangizni yarating</p>
+          </div>
+
+          <!-- Card 2: Shkof Konstruktori -->
+          <div class="grid-card" onclick="switchTab('wardrobe')">
+            <div class="card-icon-wrapper wardrobe-bg">
+              <span class="card-emoji">🗄️</span>
+            </div>
+            <h3 class="card-title" data-i18n="card_wardrobe_title">Shkof konstruktori</h3>
+            <p class="card-desc" data-i18n="card_wardrobe_desc">Shkof va gardirob loyihasi</p>
+          </div>
+
+          <!-- Card 3: Do'kon (Circle Card) -->
+          <div class="grid-card circle-card" onclick="switchTab('shop')">
+            <div class="card-icon-wrapper shop-bg">
+              <span class="card-emoji">🛒</span>
+            </div>
+            <h3 class="card-title" data-i18n="card_shop_title">Do'kon</h3>
+            <span class="shop-badge" id="shop-product-count">0</span>
+          </div>
+
+          <!-- Card 4: Buyurtmalarim (Circle Card) -->
+          <div class="grid-card circle-card" onclick="switchTab('orders')">
+            <div class="card-icon-wrapper orders-bg">
+              <span class="card-emoji">📦</span>
+            </div>
+            <h3 class="card-title" data-i18n="card_orders_title">Buyurtmalarim</h3>
+            <span class="orders-badge" id="orders-count">0</span>
+          </div>
+        </div>
+
+        <!-- Quick Call Measurer Action Button -->
+        <div class="measurer-call-card" onclick="toggleMeasurerModal()">
+          <div class="measurer-icon">📐</div>
+          <div class="measurer-info">
+            <h4 data-i18n="measurer_title">Uyga bepul o'lchovchi chaqirish</h4>
+            <p data-i18n="measurer_desc">Mutaxassisimiz manzilingizga borib o'lchov va 3D maslahat beradi</p>
+          </div>
+          <div class="measurer-arrow">➔</div>
+        </div>
+
+        <!-- Quick Promo Banner -->
+        <div class="promo-banner">
+          <div class="promo-content">
+            <h4 data-i18n="promo_title">💳 Bo'lib to'lash imkoniyati</h4>
+            <p data-i18n="promo_desc">Barcha mebellarni 3, 6 va 12 oyga muddatli to'lovga xarid qilishingiz mumkin!</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 2: OSHXONA KONSTRUKTORI ================= -->
+      <section id="tab-kitchen" class="tab-page">
+        <header class="page-header">
+          <h2 data-i18n="kitchen_header">Oshxona Konstruktori</h2>
+          <p data-i18n="kitchen_sub">Oshxona o'lchami, materiali va rangini tanlang hamda narxini hisoblang</p>
+        </header>
+
+        <div class="constructor-container">
+          <!-- 2D Visual Preview Canvas -->
+          <div class="preview-box">
+            <div class="preview-title" data-i18n="preview_title">🎮 Interaktiv Visual Ko'rinish</div>
+            <div id="kitchen-preview-canvas" class="kitchen-canvas">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+          <!-- Color Swatches Selector -->
+          <div class="form-group">
+            <label data-i18n="color_label">Fasad va Mebel Rangi</label>
+            <div class="color-swatches" id="kitchen-color-picker">
+              <button class="swatch-btn active" style="background: #ffffff;" onclick="setKitchenColor('#ffffff', 'Oq Gloss', this)" title="Oq Gloss"></button>
+              <button class="swatch-btn" style="background: #2c2e33;" onclick="setKitchenColor('#2c2e33', 'Grafite Mat', this)" title="Grafite Mat"></button>
+              <button class="swatch-btn" style="background: #e8dfd8;" onclick="setKitchenColor('#e8dfd8', 'Bej / Krem', this)" title="Bej Krem"></button>
+              <button class="swatch-btn" style="background: #8a5a36;" onclick="setKitchenColor('#8a5a36', 'Eman Yog\'och', this)" title="Eman Yog'och"></button>
+              <button class="swatch-btn" style="background: #3c5063;" onclick="setKitchenColor('#3c5063', 'To\'q Ko\'k Mat', this)" title="To'q Ko'k"></button>
+            </div>
+            <div class="selected-color-name" id="kitchen-selected-color-text">Tanlangan rang: Oq Gloss</div>
+          </div>
+
+          <!-- Options Form -->
+          <div class="form-group">
+            <label data-i18n="shape_label">Oshxona shakli</label>
+            <div class="option-selector" id="kitchen-shape-select">
+              <button class="opt-btn active" onclick="setKitchenShape('straight', this)" data-i18n="shape_straight">To'g'ri (I)</button>
+              <button class="opt-btn" onclick="setKitchenShape('lshape', this)" data-i18n="shape_lshape">L-simon (L)</button>
+              <button class="opt-btn" onclick="setKitchenShape('ushape', this)" data-i18n="shape_ushape">U-simon (U)</button>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group half">
+              <label><span data-i18n="len_label">Uzunligi</span>: <span id="val-k-length">3.0</span>m</label>
+              <input type="range" id="k-length" min="1.5" max="8.0" step="0.1" value="3.0" oninput="updateKitchenCalc()">
+            </div>
+            <div class="form-group half">
+              <label><span data-i18n="height_label">Balandligi</span>: <span id="val-k-height">2.4</span>m</label>
+              <input type="range" id="k-height" min="2.0" max="3.2" step="0.1" value="2.4" oninput="updateKitchenCalc()">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label data-i18n="facade_label">Fasad materiali</label>
+            <select id="k-facade" onchange="updateKitchenCalc()" class="custom-select">
+              <option value="mdf_laminat" data-price="2200000">MDF Laminat (2.2 mln so'm/m)</option>
+              <option value="mdf_akril" data-price="2800000" selected>MDF Akril Premium (2.8 mln so'm/m)</option>
+              <option value="mdf_kraska" data-price="3400000">MDF Kraska (Emal) (3.4 mln so'm/m)</option>
+              <option value="wood_shpon" data-price="4500000">Tabiiy Yog'och / Shpon (4.5 mln so'm/m)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label data-i18n="top_label">Stoleshnitsa (Stol usti) materiali</label>
+            <select id="k-top" onchange="updateKitchenCalc()" class="custom-select">
+              <option value="laminat" data-price="300000">Vaqtincha Laminat (300,000 so'm/m)</option>
+              <option value="fake_stone" data-price="850000" selected>Sun'iy Akril Tosh (850,000 so'm/m)</option>
+              <option value="quartz" data-price="1400000">Kvarc Aglomerat Premium (1.4 mln so'm/m)</option>
+            </select>
+          </div>
+
+          <!-- Installment Payment Selector -->
+          <div class="form-group">
+            <label data-i18n="payment_type_label">To'lov Turi</label>
+            <div class="option-selector" id="k-payment-selector">
+              <button class="opt-btn active" onclick="setPaymentType('full', this, 'k')">Naqd / Bir yo'la</button>
+              <button class="opt-btn" onclick="setPaymentType('3m', this, 'k')">3 Oy</button>
+              <button class="opt-btn" onclick="setPaymentType('6m', this, 'k')">6 Oy</button>
+              <button class="opt-btn" onclick="setPaymentType('12m', this, 'k')">12 Oy</button>
+            </div>
+          </div>
+
+          <!-- Total Calculation Box -->
+          <div class="calc-result-card">
+            <div class="calc-label" data-i18n="total_label">Taxminiy Loyiha Narxi:</div>
+            <div class="calc-price" id="kitchen-total-price">8,400,000 so'm</div>
+            <div class="installment-badge-text" id="kitchen-installment-text"></div>
+            <div class="calc-note" data-i18n="calc_note">* Yakuniy narx aniq o'lchovdan so'ng belgilanadi</div>
+            
+            <div class="btn-group-row">
+              <button class="action-btn secondary-btn" onclick="exportSummary('kitchen')">
+                📥 Smetani Saqlash / Chek
+              </button>
+              <button class="action-btn primary-btn" onclick="submitKitchenOrder()">
+                🚀 Loyihani Yuborish
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 3: SHKOF KONSTRUKTORI ================= -->
+      <section id="tab-wardrobe" class="tab-page">
+        <header class="page-header">
+          <h2 data-i18n="wardrobe_header">Shkof & Gardirob Konstruktori</h2>
+          <p data-i18n="wardrobe_sub">Shkof turini tanlang, bo'limlarni sozlang va narxni hisoblang</p>
+        </header>
+
+        <div class="constructor-container">
+          <!-- Visual Box Render -->
+          <div class="preview-box">
+            <div class="preview-title" data-i18n="preview_w_title">🚪 Shkof Modellari va Tuzilishi</div>
+            <div class="wardrobe-canvas">
+              <div class="w-cabinet" id="w-render-box">
+                <!-- Rendered via JS -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Color Selector for Wardrobe -->
+          <div class="form-group">
+            <label data-i18n="color_label">Eshiklar va Korpus Rangi</label>
+            <div class="color-swatches" id="wardrobe-color-picker">
+              <button class="swatch-btn active" style="background: #ffffff;" onclick="setWardrobeColor('#ffffff', 'Oq Gloss', this)"></button>
+              <button class="swatch-btn" style="background: #2c2e33;" onclick="setWardrobeColor('#2c2e33', 'Grafite Mat', this)"></button>
+              <button class="swatch-btn" style="background: #8a5a36;" onclick="setWardrobeColor('#8a5a36', 'Eman Yog\'och', this)"></button>
+              <button class="swatch-btn" style="background: #d4af37;" onclick="setWardrobeColor('#d4af37', 'Oltin Shpon', this)"></button>
+            </div>
+            <div class="selected-color-name" id="wardrobe-selected-color-text">Tanlangan rang: Oq Gloss</div>
+          </div>
+
+          <!-- Wardrobe Options -->
+          <div class="form-group">
+            <label data-i18n="w_type_label">Shkof turi</label>
+            <div class="option-selector" id="w-type-select">
+              <button class="opt-btn active" onclick="setWardrobeType('kupe', this)">Shkof Kupe</button>
+              <button class="opt-btn" onclick="setWardrobeType('swing', this)">Ochiladigan</button>
+              <button class="opt-btn" onclick="setWardrobeType('gardirob', this)">Gardirob Xona</button>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group half">
+              <label><span data-i18n="width_label">Kengligi</span>: <span id="val-w-width">200</span> sm</label>
+              <input type="range" id="w-width" min="100" max="400" step="10" value="200" oninput="updateWardrobeCalc()">
+            </div>
+            <div class="form-group half">
+              <label><span data-i18n="height_label">Balandligi</span>: <span id="val-w-height">240</span> sm</label>
+              <input type="range" id="w-height" min="180" max="300" step="5" value="240" oninput="updateWardrobeCalc()">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group half">
+              <label><span data-i18n="doors_label">Eshiklar soni</span>: <span id="val-w-doors">3</span> ta</label>
+              <input type="range" id="w-doors" min="2" max="6" step="1" value="3" oninput="updateWardrobeCalc()">
+            </div>
+            <div class="form-group half">
+              <label><span data-i18n="drawers_label">Tortmalar soni</span>: <span id="val-w-drawers">2</span> ta</label>
+              <input type="range" id="w-drawers" min="0" max="8" step="1" value="2" oninput="updateWardrobeCalc()">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label data-i18n="w_mat_label">Material</label>
+            <select id="w-material" onchange="updateWardrobeCalc()" class="custom-select">
+              <option value="ldsp" data-price="1500000">LDSP Rossiya Premium (1.5 mln so'm/m)</option>
+              <option value="mdf" data-price="2100000" selected>MDF Akril / Frezerovka (2.1 mln so'm/m)</option>
+              <option value="mdf_glass" data-price="2600000">MDF + Shisha / Profil (2.6 mln so'm/m)</option>
+            </select>
+          </div>
+
+          <div class="checkbox-group">
+            <label class="custom-checkbox">
+              <input type="checkbox" id="w-mirror-check" onchange="updateWardrobeCalc()" checked>
+              <span class="checkmark"></span>
+              <span data-i18n="mirror_label">Fasadga oyna o'rnatish (🪞 Oyna eshik)</span>
+            </label>
+          </div>
+
+          <!-- Installment Payment Selector -->
+          <div class="form-group">
+            <label data-i18n="payment_type_label">To'lov Turi</label>
+            <div class="option-selector" id="w-payment-selector">
+              <button class="opt-btn active" onclick="setPaymentType('full', this, 'w')">Naqd / Bir yo'la</button>
+              <button class="opt-btn" onclick="setPaymentType('3m', this, 'w')">3 Oy</button>
+              <button class="opt-btn" onclick="setPaymentType('6m', this, 'w')">6 Oy</button>
+              <button class="opt-btn" onclick="setPaymentType('12m', this, 'w')">12 Oy</button>
+            </div>
+          </div>
+
+          <!-- Total Calculation Box -->
+          <div class="calc-result-card">
+            <div class="calc-label" data-i18n="total_w_label">Taxminiy Shkof Narxi:</div>
+            <div class="calc-price" id="wardrobe-total-price">5,300,000 so'm</div>
+            <div class="installment-badge-text" id="wardrobe-installment-text"></div>
+            <div class="calc-note" data-i18n="calc_w_note">* Mexanizmlar va yetkazib berish o'z ichiga olingan</div>
+
+            <div class="btn-group-row">
+              <button class="action-btn secondary-btn" onclick="exportSummary('wardrobe')">
+                📥 Smetani Saqlash / Chek
+              </button>
+              <button class="action-btn primary-btn" onclick="submitWardrobeOrder()">
+                🚪 Loyihani Yuborish
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 4: DO'KON (SHOP & CATALOG) ================= -->
+      <section id="tab-shop" class="tab-page">
+        <header class="page-header flex-between">
+          <div>
+            <h2 data-i18n="shop_header">Mebel Do'koni</h2>
+            <p data-i18n="shop_sub">Tayyor va buyurtma mebellar katalogi</p>
+          </div>
+          <button class="cart-badge-btn" onclick="toggleCartModal()">
+            🛒 <span id="cart-count">0</span>
+          </button>
+        </header>
+
+        <!-- Category Filter Pills -->
+        <div class="category-pills" id="category-pills">
+          <button class="pill-btn active" onclick="filterCategory('all', this)" data-i18n="cat_all">Barchasi</button>
+          <button class="pill-btn" onclick="filterCategory('kitchen', this)" data-i18n="cat_kitchen">Oshxona</button>
+          <button class="pill-btn" onclick="filterCategory('bedroom', this)" data-i18n="cat_bedroom">Yotoqxona</button>
+          <button class="pill-btn" onclick="filterCategory('tv_zone', this)" data-i18n="cat_tv">TV Zona</button>
+          <button class="pill-btn" onclick="filterCategory('wardrobe', this)" data-i18n="cat_wardrobe">Gardirob</button>
+          <button class="pill-btn" onclick="filterCategory('office', this)" data-i18n="cat_office">Ofis</button>
+        </div>
+
+        <!-- Products Grid -->
+        <div class="products-grid" id="products-container">
+          <!-- Dynamic Products inserted via JS -->
+        </div>
+      </section>
+
+      <!-- ================= TAB 5: BUYURTMALARIM ================= -->
+      <section id="tab-orders" class="tab-page">
+        <header class="page-header">
+          <h2 data-i18n="orders_header">Mening Buyurtmalarim</h2>
+          <p data-i18n="orders_sub">Yuborilgan va faol buyurtmalaringiz holati</p>
+        </header>
+
+        <div class="orders-list" id="orders-container">
+          <!-- Dynamic Orders inserted via JS -->
+        </div>
+      </section>
+
+      <!-- ================= TAB 6: PROFIL ================= -->
+      <section id="tab-profile" class="tab-page">
+        <header class="page-header">
+          <h2 data-i18n="profile_header">Foydalanuvchi Profili</h2>
+        </header>
+
+        <div class="profile-card">
+          <div class="profile-avatar" id="user-avatar-initials">U</div>
+          <div class="profile-info">
+            <h3 id="user-full-name">Foydalanuvchi</h3>
+            <p id="user-telegram-id">ID: -</p>
+          </div>
+        </div>
+
+        <div class="profile-settings-form">
+          <div class="form-group">
+            <label data-i18n="phone_label">Telefon raqamingiz</label>
+            <input type="tel" id="user-phone-input" placeholder="+998 90 123 45 67" class="custom-input">
+          </div>
+
+          <div class="form-group">
+            <label data-i18n="address_label">Yetkazib berish manzili</label>
+
+            <div class="location-input-group">
+              <input type="text" id="user-address-input" placeholder="Toshkent sh., Yunusobod t..." class="custom-input">
+              <button type="button" class="get-location-btn" onclick="fetchUserLocation()" title="Xaridadan manzilni olish">
+                📍 Manzil
+              </button>
+            </div>
+            <div class="location-status-text" id="location-coords-status"></div>
+          </div>
+
+          <button class="action-btn secondary-btn" onclick="saveUserProfile()" data-i18n="save_btn">
+            💾 Ma'lumotlarni Saqlash
+          </button>
+        </div>
+
+        <div class="support-box">
+          <h4 data-i18n="support_title">💬 Qo'llab-quvvatlash va Konsultatsiya</h4>
+          <p data-i18n="support_desc">Savollaringiz bormi? Administrator bilan to'g'ridan-to'g'ri bog'laning.</p>
+          <a href="https://t.me/ilyosdesign2927" target="_blank" class="admin-contact-btn" id="admin-link" data-i18n="admin_btn">
+            👨‍💼 Admin bilan bog'lanish
+          </a>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Shopping Cart Modal / Drawer -->
+    <div id="cart-modal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 data-i18n="cart_title">🛒 Xarid Savatchasi</h3>
+          <button class="close-modal-btn" onclick="toggleCartModal()">✕</button>
+        </div>
+        <div class="cart-items-list" id="cart-items-container">
+          <!-- Cart Items rendered here -->
+        </div>
+        <div class="cart-summary">
+          <div class="summary-line">
+            <span data-i18n="total_cart">Jami summa:</span>
+            <span class="total-amount" id="cart-total-price">0 so'm</span>
+          </div>
+          <button class="action-btn primary-btn" onclick="checkoutCart()" data-i18n="checkout_btn">
+            ✅ Buyurtmani rasmiylashtirish
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Measurer Modal -->
+    <div id="measurer-modal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 data-i18n="measurer_modal_title">📐 Uyga Bepul O'lchovchi Chaqirish</h3>
+          <button class="close-modal-btn" onclick="toggleMeasurerModal()">✕</button>
+        </div>
+        <div class="measurer-modal-body">
+          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+            O'lchovchi mutaxassisimiz uyingizga borib o'lchov oladi, mebel namunalari bilan tanishtiradi va 3D maslahat beradi.
+          </p>
+
+          <div class="form-group">
+            <label>Qulay Sana</label>
+            <input type="date" id="measurer-date-input" class="custom-input">
+          </div>
+
+          <div class="form-group" style="margin-top: 10px;">
+            <label>Qulay Vaqt</label>
+            <select id="measurer-time-input" class="custom-select">
+              <option value="09:00 - 12:00">Ertalab (09:00 - 12:00)</option>
+              <option value="12:00 - 15:00">Tushlikdan so'ng (12:00 - 15:00)</option>
+              <option value="15:00 - 18:00">Kechki payt (15:00 - 18:00)</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-top: 10px;">
+            <label>Telefon raqamingiz</label>
+            <input type="tel" id="measurer-phone-input" placeholder="+998 90 123 45 67" class="custom-input">
+          </div>
+
+          <button class="action-btn primary-btn" style="margin-top: 16px;" onclick="submitMeasurerRequest()">
+            🚀 O'lchovchi Chaqirish So'rovini Yuborish
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export Summary Modal (Receipt) -->
+    <div id="export-modal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>📥 Loyiha Smetasi & Chek</h3>
+          <button class="close-modal-btn" onclick="toggleExportModal()">✕</button>
+        </div>
+        <div class="export-modal-body" id="export-modal-content">
+          <!-- Receipt Content inserted via JS -->
+        </div>
+        <button class="action-btn primary-btn" style="margin-top: 14px;" onclick="window.print()">
+          🖨️ Chop etish / PDF saqlash
+        </button>
+      </div>
+    </div>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" onclick="switchTab('home')" id="nav-home">
+        <div class="nav-indicator"></div>
+        <span class="nav-icon">✨</span>
+        <span class="nav-label" data-i18n="nav_home">Bosh sahifa</span>
+      </button>
+      <button class="nav-item" onclick="switchTab('kitchen')" id="nav-kitchen">
+        <div class="nav-indicator"></div>
+        <span class="nav-icon">🍳</span>
+        <span class="nav-label" data-i18n="nav_kitchen">Oshxona</span>
+      </button>
+      <button class="nav-item" onclick="switchTab('wardrobe')" id="nav-wardrobe">
+        <div class="nav-indicator"></div>
+        <span class="nav-icon">🗄️</span>
+        <span class="nav-label" data-i18n="nav_wardrobe">Shkof</span>
+      </button>
+      <button class="nav-item" onclick="switchTab('shop')" id="nav-shop">
+        <div class="nav-indicator"></div>
+        <span class="nav-icon">🛒</span>
+        <span class="nav-label" data-i18n="nav_shop">Do'kon</span>
+      </button>
+      <button class="nav-item" onclick="switchTab('orders')" id="nav-orders">
+        <div class="nav-indicator"></div>
+        <span class="nav-icon">📦</span>
+        <span class="nav-label" data-i18n="nav_orders">Buyurtmalar</span>
+      </button>
+      <button class="nav-item" onclick="switchTab('profile')" id="nav-profile">
+        <div class="nav-indicator"></div>
+        <span class="nav-icon">👤</span>
+        <span class="nav-label" data-i18n="nav_profile">Profil</span>
+      </button>
+    </nav>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    // Initialize app after DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function() {
+        console.log('App initialized');
+      });
+    } else {
+      console.log('App initialized');
+    }
+  </script>
+</body>
+</html>

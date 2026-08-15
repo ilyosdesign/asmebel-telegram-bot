@@ -2,8 +2,13 @@
 
 import logging
 import asyncio
-from google.generativeai.client import configure
-from google.generativeai.generative_models import GenerativeModel
+try:
+    from google.generativeai.client import configure
+    from google.generativeai.generative_models import GenerativeModel
+except ImportError:
+    from google.ai.generativelanguage import GenerativeModel as NewGenerativeModel
+    configure = None
+    GenerativeModel = None
 from config import GEMINI_API_KEY
 from products import get_categories_for_prompt
 
