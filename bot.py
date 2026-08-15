@@ -1,6 +1,6 @@
 # bot.py
 
-import logging, asyncio, os, threading
+import logging, asyncio, os, threading, json, mimetypes
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram.ext import (
     Application, 
@@ -11,38 +11,112 @@ from telegram.ext import (
     CallbackQueryHandler,
     ConversationHandler
 )
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, WebAppInfo
 from telegram.constants import ChatAction
 
 # Mahalliy modullarni import qilish
-from config import TELEGRAM_TOKEN, ADMIN_ID, ADMIN_USERNAME
+from config import TELEGRAM_TOKEN, ADMIN_ID, ADMIN_USERNAME, WEBAPP_URL, PORT
 from gemini_handler import get_gemini_response
 from products import CATEGORIES_DATA, add_product, delete_product, edit_product, add_category, delete_category
 from faq import FAQ_DATA
 from excel_handler import save_order_to_excel
 from user_manager import add_user, get_all_user_ids
 
+WEBAPP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'webapp')
+
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path.startswith('/api/products'):
+            self.send_response(200)
+            self.send_header("Content-type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(CATEGORIES_DATA, ensure_ascii=False).encode('utf-8'))
+            return
+
+        req_path = self.path.split('?')[0]
+
+        # Asl yo'lni aniqlash
+        if req_path == '/' or req_path == '':
+            file_path = os.path.join(WEBAPP_DIR, 'index.html')
+        else:
+            file_path = os.path.join(WEBAPP_DIR, req_path.lstrip('/'))
+
+        # Faylni tekshirish va xizmat qilish
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            mime_type, _ = mimetypes.guess_type(file_path)
+            self.send_response(200)
+            self.send_header("Content-type", mime_type or "application/octet-stream; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.end_headers()
+            try:
+                with open(file_path, 'rb') as f:
+                    self.wfile.write(f.read())
+            except Exception as e:
+                logging.error(f"Faylni o'qishda xatolik: {file_path}, {e}")
+        else:
+            # Agar fayl topilmasa, index.html ni qaytarish (SPA uchun)
+            fallback_path = os.path.join(WEBAPP_DIR, 'index.html')
+            if os.path.exists(fallback_path):
+                self.send_response(200)
+                self.send_header("Content-type", "text/html; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                with open(fallback_path, 'rb') as f:
+                    self.wfile.write(f.read())
+            else:
+                self.send_response(404)
+                self.send_header("Content-type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"404 - Fayl topilmadi")
+
+    def do_POST(self):
+        if self.path == '/api/order':
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                data = json.loads(post_data.decode('utf-8'))
+                logging.info(f"Received WebApp order via HTTP API: {data}")
+                self.send_response(200)
+                self.send_header("Content-type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok"}).encode('utf-8'))
+            except Exception as e:
+                logging.error(f"Error handling /api/order: {e}")
+                self.send_response(500)
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+        else:
+            self.send_response(404)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+
+    def do_OPTIONS(self):
         self.send_response(200)
-        self.send_header("Content-type", "text/plain")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Access-Control-Max-Age", "3600")
         self.end_headers()
-        self.wfile.write(b"ASMEBEL Bot is running!")
 
     def log_message(self, format, *args):
         pass
 
 def start_health_check_server():
-    port = os.getenv("PORT")
-    if port:
-        try:
-            port_num = int(port)
-            server = HTTPServer(('0.0.0.0', port_num), HealthCheckHandler)
-            thread = threading.Thread(target=server.serve_forever, daemon=True)
-            thread.start()
-            logging.info(f"Health check HTTP server started on port {port_num}")
-        except Exception as e:
-            logging.warning(f"Could not start HTTP server on port {port}: {e}")
+    try:
+        port_num = int(PORT)
+        server = HTTPServer(('0.0.0.0', port_num), HealthCheckHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        logging.info(f"Health check & WebApp HTTP server started on port {port_num}")
+    except ValueError:
+        logging.error(f"PORT noto'g'ri formatda: {PORT}")
+    except Exception as e:
+        logging.error(f"HTTP server ishga tushishda xatolik (port {PORT}): {e}")
 
 # Loglashni sozlash (xatoliklarni oson topish uchun)
 logging.basicConfig(
@@ -65,75 +139,161 @@ GET_PHONE_NUMBER = 17
 # Ommaviy xabar yuborish holatlari
 GET_BROADCAST_MESSAGE, CONFIRM_BROADCAST = 18, 19
  
+async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message or not update.message.web_app_data:
+        return
+
+    raw_data = update.message.web_app_data.data
+    try:
+        if not raw_data or not isinstance(raw_data, str):
+            logger.warning("WebApp data noto'g'ri formatda")
+            await update.message.reply_text("Buyurtma ma'lumotlarida xatolik.")
+            return
+
+        data = json.loads(raw_data)
+
+        if not isinstance(data, dict) or not data:
+            logger.warning("WebApp data bo'sh yoki dict emas")
+            await update.message.reply_text("Buyurtma ma'lumotlarida xatolik.")
+            return
+
+        user = update.effective_user
+        title = str(data.get('title', 'Mini App Buyurtmasi')).strip()
+        price = str(data.get('total_price', '-')).strip()
+
+        if not title or len(title) > 500:
+            logger.warning(f"Noto'g'ri mahsulot nomi: {title}")
+            title = "Mini App Buyurtmasi"
+
+        msg = f"<b>✨ YANGI MINI APP BUYURTMASI!</b>\n\n"
+        msg += f"👤 <b>Mijoz:</b> {user.mention_html()} (ID: {user.id})\n"
+        msg += f"📦 <b>Turi:</b> {title}\n"
+        msg += f"💰 <b>Summa:</b> {price}\n"
+
+        for k, v in data.items():
+            if k not in ['type', 'user', 'title', 'total_price']:
+                v_str = str(v)[:200]
+                msg += f"🔹 <b>{str(k).capitalize()[:50]}:</b> {v_str}\n"
+
+        try:
+            save_order_to_excel({
+                'User ID': str(user.id),
+                'Name': str(user.full_name or "")[:100],
+                'Product': title,
+                'Details': str(data)[:500],
+                'Total': price
+            })
+        except Exception as e:
+            logger.error(f"Excel saqlashda xatolik: {e}")
+
+        await update.message.reply_html(
+            f"✅ Rahmat, {user.first_name}! <b>{title}</b> bo'yicha buyurtmangiz qabul qilindi.\n\n"
+            f"Menejerimiz tez orada siz bilan bog'lanadi."
+        )
+
+        if ADMIN_ID:
+            try:
+                await context.bot.send_message(chat_id=ADMIN_ID, text=msg, parse_mode="HTML")
+                logger.info(f"Admin xabar yuborildi: {user.id}")
+            except Exception as admin_err:
+                logger.error(f"Adminga xabar yuborishda xatolik: {admin_err}")
+
+    except json.JSONDecodeError as e:
+        logger.error(f"WebApp JSON xatoligi: {e}")
+        await update.message.reply_text("Buyurtma ma'lumotlarini qayta ishlashda xatolik yuz berdi.")
+    except Exception as e:
+        logger.error(f"WebApp data qayta ishlashda xatolik: {type(e).__name__}: {e}")
+        await update.message.reply_text("Buyurtma ma'lumotlarini qayta ishlashda xatolik yuz berdi.")
+
+def get_valid_webapp_url() -> str:
+    url = (WEBAPP_URL or "").strip()
+    if url and url.startswith("https://"):
+        return url
+    return ""
+
+def get_main_keyboard():
+    web_url = get_valid_webapp_url()
+    if web_url:
+        first_btn = KeyboardButton("🌐 Oshxona (Web interfeys)", web_app=WebAppInfo(url=web_url))
+    else:
+        first_btn = KeyboardButton("🌐 Oshxona (Web interfeys)")
+
+    return ReplyKeyboardMarkup(
+        [
+            [first_btn],
+            [KeyboardButton("🏗️ Oshxona konstruktori"), KeyboardButton("🚪 Shkof konstruktori")],
+            [KeyboardButton("🎨 Tayyor dizaynlar"), KeyboardButton("📦 Mening buyurtmalarim")],
+            [KeyboardButton("🛒 Do'kon (Katalog)"), KeyboardButton("👨‍💼 Admin bilan bog'lanish")]
+        ],
+        resize_keyboard=True
+    )
+
 # /start buyrug'iga javob beruvchi funksiya
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
-    # Ob'ektlar None emasligini tekshirish
     if not update.message or not user:
         return
 
     # Foydalanuvchini bazaga qo'shish
     add_user(user.id)
+    reply_markup = get_main_keyboard()
 
     await update.message.reply_html(
         f"Assalomu alaykum, {user.mention_html()}! Men <b>ASMEBEL</b> do'konining virtual yordamchisiman.\n\n"
-        f"Menga mebellar haqida savol berishingiz yoki katalogimizni ko'rish uchun /katalog buyrug'ini yuborishingiz mumkin."
+        f"Pastdagi menyu tugmalari yoki <b>🌐 Oshxona (Web interfeys)</b> orqali konstruktorimizdan foydalanishingiz mumkin!",
+        reply_markup=reply_markup
     )
 
 # /katalog buyrug'i uchun funksiya
 async def show_catalog(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Katalog kategoriyalarini tugmalar bilan ko'rsatadi."""
-    # Ob'ekt None emasligini tekshirish
     if not update.message and not update.callback_query:
         return
 
-    # Kategoriyalar ro'yxatidan dinamik ravishda tugmalar yaratish
+    web_url = get_valid_webapp_url()
     keyboard = []
+    if web_url:
+        keyboard.append([InlineKeyboardButton("🌐 ASMEBEL Web App-ni ochish", web_app=WebAppInfo(url=web_url))])
+
     for key, category in CATEGORIES_DATA.items():
         button_text = f"{category['emoji']} {category['name']}"
         keyboard.append([InlineKeyboardButton(button_text, callback_data=f"cat_{key}")])
 
-    # Administrator bilan bog'lanish tugmasini qo'shish
     if ADMIN_USERNAME:
         keyboard.append([InlineKeyboardButton("👨‍💼 Administrator bilan bog'lanish", url=f"https://t.me/{ADMIN_USERNAME}")])
 
     keyboard.append([InlineKeyboardButton("❓ Ko'p beriladigan savollar (FAQ)", callback_data='show_faq')])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
-    text = "Asosiy kategoriyalardan birini tanlang:"
+    text = "<b>Asosiy kategoriyalardan birini tanlang:</b>"
 
     if update.callback_query:
-        await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+        await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode="HTML")
     elif update.message:
-        await update.message.reply_text(text, reply_markup=reply_markup)
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="HTML")
 
 # Tugmalar bosilganda ishlaydigan funksiya
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Tugmalar bosilganda javob qaytaradi."""
     query = update.callback_query
-    # Ob'ektlar None emasligini tekshirish
     if not query or not query.data: 
         return
-    await query.answer()  # Tugma bosilganini tasdiqlash
+    await query.answer()
 
     callback_data = query.data
 
-    # Asosiy menyuga qaytish
     if callback_data == 'main_menu':
         await show_catalog(update, context)
         return
 
-    # FAQ bo'limini ko'rsatish
     if callback_data == 'show_faq':
         await show_faq(update, context)
         return
     
-    # FAQ savoliga javob berish
     elif callback_data.startswith('faq_q_'):
         await show_faq_answer(update, context)
         return
 
-    # Kategoriya tanlanganda (mahsulotlar ro'yxatini ko'rsatish)
     if callback_data.startswith('cat_'):
         category_key = callback_data.split('_', 1)[1]
         category = CATEGORIES_DATA.get(category_key)
@@ -149,7 +309,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             else:
                 text = f"<b>{category['name']}</b> bo'limidagi mahsulotlar:"
                 for product in products:
-                    # Tavsif bo'lmasa, xatolikni oldini olish
                     product_name = product.get('caption', 'Nomsiz mahsulot').split('\n')[0]
                     keyboard.append([InlineKeyboardButton(
                         product_name, 
@@ -160,7 +319,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
-    # Mahsulot tanlanganda (rasm va tavsifni ko'rsatish)
     elif callback_data.startswith('prod_'):
         parts = callback_data.split('_', 2)
         if len(parts) != 3:
@@ -169,7 +327,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         _, category_key, product_id_str = parts
         try:
             product_id = int(product_id_str)
-            
             category = CATEGORIES_DATA.get(category_key)
             product_to_show = None
             if category:
@@ -184,7 +341,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     [InlineKeyboardButton("⬅️ Orqaga (Mahsulotlar ro'yxati)", callback_data=f"cat_{category_key}")]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
-                # Oldingi matnli xabarni o'chirib, rasm yuboramiz
                 if query.message:
                     await query.delete_message()
                 
@@ -199,7 +355,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         photo=product_to_show['photo_id'],
                         caption=product_to_show['caption'],
                         reply_markup=reply_markup,
-                        parse_mode="HTML" # Tavsifda HTML ishlatish uchun
+                        parse_mode="HTML"
                     )
                 except Exception as e:
                     logger.error(f"RASM YUBORISHDA XATOLIK YUZ BERDI: {e}")
@@ -210,21 +366,94 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             logger.error(f"Mahsulotni ko'rsatishda umumiy xatolik: {e}")
             await query.answer("Noma'lum xatolik yuz berdi.", show_alert=True)
 
-# Matnli xabarlarni Gemini'ga yuboruvchi funksiya
+# Matnli xabarlarni qayta ishlaydigan funksiya
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Ob'ektlar None emasligini tekshirish
     if not update.message or not update.message.text or not update.effective_chat:
         return
 
-    user_message = update.message.text
-    
-    # Foydalanuvchiga "yozayapman..." holatini ko'rsatish
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    text = update.message.text.strip()
+    web_url = get_valid_webapp_url()
 
-    # Gemini'dan javob olish
-    response_text = await get_gemini_response(user_message)
-    
-    # Foydalanuvchiga javob yuborish
+    def make_btn(btn_text, url):
+        if url:
+            return InlineKeyboardMarkup([[InlineKeyboardButton(btn_text, web_app=WebAppInfo(url=url))]])
+        return None
+
+    if "Oshxona (Web" in text or "Web interfeys" in text or "Mini App" in text:
+        reply_markup = make_btn("🌐 Oshxona Web App-ni ochish", web_url)
+        if web_url:
+            await update.message.reply_html(
+                "<b>🌐 ASMEBEL Oshxona Web Interfeysi</b>\n\nPastdagi tugmani bosish orqali to'g'ridan-to'g'ri interaktiv 3D/2D konstruktorni ochishingiz mumkin:",
+                reply_markup=reply_markup
+            )
+        else:
+            await update.message.reply_html(
+                "<b>🌐 ASMEBEL Oshxona Web Interfeysi</b>\n\n"
+                "⚠️ <b>Diqqat:</b> Telegram WebApp ishlashi uchun <code>.env</code> faylidagi <code>WEBAPP_URL</code> ga <b>https://</b> bilan boshlanadigan HTTPS havola kiritilishi kerak.\n\n"
+                "<i>(Masalan: Render/Vercel deploy URL yoki Ngrok https://... manzilini kiriting)</i>"
+            )
+        return
+
+    elif "Oshxona konstruktori" in text or "Oshxona Konstruktori" in text or "Oshxona" in text:
+        keyboard = []
+        if web_url:
+            keyboard.append([InlineKeyboardButton("🌐 Oshxona Web App-da loyihalash", web_app=WebAppInfo(url=web_url))])
+        keyboard.append([InlineKeyboardButton("📋 Katalogdan ko'rish", callback_data="cat_kitchen")])
+        await update.message.reply_html(
+            "<b>🏗️ Oshxona Konstruktori</b>\n\nInteraktiv 3D/2D konstruktor orqali oshxonangiz o'lchamlari, fasad materiallari va ranglarini tanlang hamda narxini hisoblang!",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
+    elif "Shkof" in text or "Shkaf" in text:
+        keyboard = []
+        if web_url:
+            keyboard.append([InlineKeyboardButton("🌐 Shkof Web App-da loyihalash", web_app=WebAppInfo(url=web_url))])
+        keyboard.append([InlineKeyboardButton("📋 Gardiroblar katalogi", callback_data="cat_wardrobe")])
+        await update.message.reply_html(
+            "<b>🚪 Shkof va Gardirob Konstruktori</b>\n\nShkof o'lchamlari, eshiklar soni, javonlar va oyna variantlarini sozlang!",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
+    elif "Do'kon" in text or "Dokon" in text or "Katalog" in text:
+        await show_catalog(update, context)
+        return
+
+    elif "Buyurtmalarim" in text:
+        keyboard = []
+        if web_url:
+            keyboard.append([InlineKeyboardButton("🌐 Buyurtmalarni Web App-da ko'rish", web_app=WebAppInfo(url=web_url))])
+        await update.message.reply_html(
+            "<b>📦 Mening Buyurtmalarim</b>\n\nBuyurtmalaringiz holatini ko'rish uchun pastdagi tugmani bosing:",
+            reply_markup=InlineKeyboardMarkup(keyboard) if keyboard else None
+        )
+        return
+
+    elif "Tayyor dizaynlar" in text:
+        keyboard = [
+            [InlineKeyboardButton("🍽️ Oshxona dizaynlari", callback_data="cat_kitchen")],
+            [InlineKeyboardButton("🛏️ Yotoqxona dizaynlari", callback_data="cat_bedroom")],
+            [InlineKeyboardButton("📺 TV Zona dizaynlari", callback_data="cat_tv_zone")]
+        ]
+        await update.message.reply_html(
+            "<b>🎨 Tayyor Mebel Dizaynlari</b>\n\nBarcha tayyor va eksklyuziv mebel to'plamlarimiz:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
+    elif "Admin" in text or "Administrator" in text:
+        admin_link = f"https://t.me/{ADMIN_USERNAME}" if ADMIN_USERNAME else "https://t.me/ilyosdesign2927"
+        keyboard = [[InlineKeyboardButton("👨‍💼 Admin bilan bog'lanish", url=admin_link)]]
+        await update.message.reply_html(
+            "<b>👨‍💼 Administrator Konsultatsiyasi</b>\n\nSavollaringiz bo'lsa administrator bilan bog'lanishingiz mumkin:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
+    # Umumiylarga AI yordamchidan javob
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    response_text = await get_gemini_response(text)
     await update.message.reply_text(response_text)
 
 # --- FAQ Functions ---
@@ -278,10 +507,10 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         [InlineKeyboardButton("✏️ Mahsulotni tahrirlash", callback_data='edit_product')],
         [InlineKeyboardButton("🗑️ Mahsulotni o'chirish", callback_data='delete_product')],
         [InlineKeyboardButton("🗂️ Kategoriyalarni boshqarish", callback_data='manage_categories')],
-        [InlineKeyboardButton("📢 Xabar yuborish", callback_data='broadcast_start')]
+        [InlineKeyboardButton("📢 Ommaviy xabar yuborish", callback_data='broadcast_start')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Salom, Admin! Boshqaruv panelidasiz.", reply_markup=reply_markup)
+    await update.message.reply_text("👨‍💼 Salom, Admin! Boshqaruv panelidasiz.", reply_markup=reply_markup)
 
 async def add_product_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Mahsulot qo'shish jarayonini boshlaydi, kategoriya tanlashni so'raydi."""
@@ -669,17 +898,16 @@ async def back_to_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not query or not query.message:
         return ConversationHandler.END
     await query.answer()
-    # Asosiy admin panelini qayta ko'rsatish
     keyboard = [
         [InlineKeyboardButton("➕ Mahsulot qo'shish", callback_data='add_product')],
         [InlineKeyboardButton("✏️ Mahsulotni tahrirlash", callback_data='edit_product')],
         [InlineKeyboardButton("🗑️ Mahsulotni o'chirish", callback_data='delete_product')],
-        [InlineKeyboardButton("🗂️ Kategoriyalarni boshqarish", callback_data='manage_categories')]
+        [InlineKeyboardButton("🗂️ Kategoriyalarni boshqarish", callback_data='manage_categories')],
+        [InlineKeyboardButton("📢 Ommaviy xabar yuborish", callback_data='broadcast_start')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text("Salom, Admin! Boshqaruv panelidasiz.", reply_markup=reply_markup)
-    # Suhbatni tugatmasdan, admin panelining o'ziga qaytaramiz
-    return ConversationHandler.END # Bu suhbatni tugatadi, lekin yangisini boshlashga imkon beradi.
+    await query.edit_message_text("👨‍💼 Salom, Admin! Boshqaruv panelidasiz.", reply_markup=reply_markup)
+    return ConversationHandler.END
 
 async def add_category_start_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Yangi kategoriya uchun unikal kalit so'raydi."""
@@ -844,7 +1072,8 @@ async def order_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 async def get_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Telefon raqamni oladi va adminga yuboradi."""
     if not update.message or not update.message.contact or not context.user_data or not update.effective_user:
-        if update.message: await update.message.reply_text("Iltimos, tugma orqali raqamingizni yuboring.")
+        if update.message:
+            await update.message.reply_text("Iltimos, tugma orqali raqamingizni yuboring.")
         return GET_PHONE_NUMBER
 
     contact = update.message.contact
@@ -856,8 +1085,13 @@ async def get_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text("❌ Xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.")
         return ConversationHandler.END
 
-    _, category_key, product_id_str = callback_data.split('_', 2)
-    product_id = int(product_id_str)
+    try:
+        _, category_key, product_id_str = callback_data.split('_', 2)
+        product_id = int(product_id_str)
+    except (ValueError, IndexError):
+        await update.message.reply_text("❌ Xatolik: Mahsulot ma'lumotlari noto'g'ri.", reply_markup=ReplyKeyboardRemove())
+        return ConversationHandler.END
+
     category = CATEGORIES_DATA.get(category_key)
     if not category:
         await update.message.reply_text("❌ Xatolik: Kategoriya topilmadi.", reply_markup=ReplyKeyboardRemove())
@@ -867,7 +1101,7 @@ async def get_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     if product and ADMIN_ID:
         product_name = product.get('caption', 'Nomsiz mahsulot').split('\n')[0]
-        
+
         admin_message = (
             f"📢 <b>Yangi buyurtma!</b>\n\n"
             f"<b>Mahsulot:</b> {product_name}\n"
@@ -875,15 +1109,25 @@ async def get_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             f"<b>ID:</b> <code>{user.id}</code>\n"
             f"<b>Telefon:</b> <code>{phone_number}</code>"
         )
-        await context.bot.send_message(chat_id=int(ADMIN_ID), text=admin_message, parse_mode="HTML")
+        try:
+            await context.bot.send_message(chat_id=int(ADMIN_ID), text=admin_message, parse_mode="HTML")
+        except Exception as e:
+            logger.error(f"Adminga xabar yuborishda xatolik: {e}")
 
-        # Excelga saqlash
-        user_info = {'id': user.id, 'username': user.username, 'full_name': user.full_name, 'phone_number': phone_number}
-        save_order_to_excel(user_info, product_name)
-        
+        try:
+            save_order_to_excel({
+                'User ID': user.id,
+                'Username': user.username or 'N/A',
+                'Full Name': user.full_name or 'N/A',
+                'Phone': phone_number,
+                'Product': product_name
+            })
+        except Exception as e:
+            logger.error(f"Excelga saqlashda xatolik: {e}")
+
         await update.message.reply_text(
             "✅ Buyurtmangiz qabul qilindi. Tez orada administrator siz bilan bog'lanadi!",
-            reply_markup=ReplyKeyboardRemove() # Klaviaturani olib tashlash
+            reply_markup=ReplyKeyboardRemove()
         )
     else:
         await update.message.reply_text("❌ Xatolik: Mahsulot topilmadi yoki admin sozlanmagan.", reply_markup=ReplyKeyboardRemove())
@@ -983,12 +1227,23 @@ async def cancel_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         context.user_data.clear()
     return ConversationHandler.END
 
+async def post_init(application: Application) -> None:
+    web_url = WEBAPP_URL or "http://localhost:8080"
+    try:
+        from telegram import MenuButtonWebApp
+        await application.bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(text="🌐 Oshxona (Web)", web_app=WebAppInfo(url=web_url))
+        )
+        logger.info("Chat menu button set to WebApp successfully!")
+    except Exception as e:
+        logger.warning(f"Could not set chat menu button: {e}")
+
 def main() -> None:
     """Botni ishga tushirish."""
     if not TELEGRAM_TOKEN:
         logger.error(".env faylida TELEGRAM_TOKEN topilmadi yoki bo'sh.")
         return
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    application = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
 
     # Mahsulot qo'shish uchun ConversationHandler
     add_product_conv = ConversationHandler(
@@ -1083,7 +1338,9 @@ def main() -> None:
     application.add_handler(manage_cats_conv)
     application.add_handler(order_conv)
     application.add_handler(broadcast_conv)
+    application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data))
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("app", start))
     application.add_handler(CommandHandler("katalog", show_catalog))
     application.add_handler(CommandHandler("admin", admin_panel))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
