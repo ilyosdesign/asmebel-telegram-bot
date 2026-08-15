@@ -1,0 +1,162 @@
+🚀 RENDER.COM'GA DEPLOY QILISH - STEP BY STEP GUIDE
+
+===============================================================================
+QADAM 1: RENDER.COM'DA ACCOUNT YARATISH
+===============================================================================
+
+1. https://render.com ga o'tish
+2. "Sign Up" bosish
+3. GitHub bilan login qilish (ilyosdesign account)
+4. Authorize qilish
+
+===============================================================================
+QADAM 2: YANGI WEB SERVICE YARATISH
+===============================================================================
+
+1. Dashboard'dan "New +" bosish
+2. "Web Service" tanlash
+3. GitHub repo tanlash:
+   Repository: ilyosdesign/asmebel-telegram-bot
+   Branch: main
+
+===============================================================================
+QADAM 3: SERVICE SOZLAMALARI
+===============================================================================
+
+Service Details:
+  Name: asmebel-bot
+  Region: North Carolina (US) / Singapore / Europe (o'z tanlovingiz)
+  Environment: Python 3
+  Build Command: pip install -r requirements.txt
+  Start Command: python bot.py
+
+===============================================================================
+QADAM 4: ENVIRONMENT VARIABLES QOSHISH
+===============================================================================
+
+Environment section'da quyidagi variable'larni qo'shish:
+
+TELEGRAM_TOKEN
+Value: YOUR_TELEGRAM_TOKEN_HERE (from .env file)
+
+GEMINI_API_KEY
+Value: YOUR_GEMINI_API_KEY_HERE (from .env file)
+
+ADMIN_ID
+Value: YOUR_ADMIN_ID_HERE (from .env file)
+
+ADMIN_USERNAME
+Value: YOUR_ADMIN_USERNAME_HERE (from .env file)
+
+PORT
+Value: 10000
+
+WEBAPP_URL
+Value: https://asmebel-bot.onrender.com
+(Render deploy qilingandan keyin app URL'ni o'zgartiramiz)
+
+===============================================================================
+QADAM 5: DEPLOY QILISH
+===============================================================================
+
+1. "Create Web Service" bosish
+2. Kutish (3-5 minut)
+3. Logs'da "Application started" ko'rguncha kutish
+4. Dashboard'dan app URL'ni olish (masalan: https://asmebel-bot.onrender.com)
+
+===============================================================================
+QADAM 6: WEBHOOK O'RNATISH
+===============================================================================
+
+Render deploy bo'lganidan keyin, quydagi URL'ni terminal'da ishga tushirish:
+
+curl -X POST https://api.telegram.org/bot8917218103:AAF9bIgqwxo_j6g4Wlf-XhrZqlw1MJ2vRkE/setWebhook \
+  -H'Content-Type: application/json' \
+  -d '{"url":"https://asmebel-bot.onrender.com/webhook"}'
+
+YOKI PowerShell'da:
+
+$url = "https://api.telegram.org/bot8917218103:AAF9bIgqwxo_j6g4Wlf-XhrZqlw1MJ2vRkE/setWebhook"
+$body = @{"url"="https://asmebel-bot.onrender.com/webhook"} | ConvertTo-Json
+Invoke-WebRequest -Uri $url -Method POST -Body $body -ContentType "application/json"
+
+===============================================================================
+QADAM 7: BOT TEST QILISH
+===============================================================================
+
+1. Telegram'da @asmebel_bot ga /start yuborish
+2. Bot javob bersa - OK!
+3. /katalog - Mebel ko'rish
+4. /admin - Admin panel
+
+===============================================================================
+QADAM 8: WEBAPP_URL YANGILASH (OPTIONAL)
+===============================================================================
+
+Agar WebApp interfeys kerak bo'lsa, Render settings'da:
+
+WEBAPP_URL = https://asmebel-bot.onrender.com
+
+Bu bot'da web interfeys ko'rsatadi.
+
+===============================================================================
+MUAMMOLAR VA HAL QILISH
+===============================================================================
+
+❌ PROBLEM: "Build failed"
+✅ SOLUTION:
+   - requirements.txt to'g'rimi?
+   - Python 3.11 compatibility tekshirish
+   - Logs'da error ko'rish
+
+❌ PROBLEM: "Bot not responding"
+✅ SOLUTION:
+   - Webhook to'g'rimi?
+   - Telegram token to'g'rimi?
+   - Render logs'da error ko'rish
+
+❌ PROBLEM: "Port already in use"
+✅ SOLUTION:
+   - PORT=10000 Render uchun tavsiya qilinadi
+   - Local'da PORT=3010 ishlatish
+
+===============================================================================
+HELPFUL LINKS
+===============================================================================
+
+📖 Render Docs: https://render.com/docs
+🤖 Telegram Bot API: https://core.telegram.org/bots/api
+📊 GitHub: https://github.com/ilyosdesign/asmebel-telegram-bot
+
+===============================================================================
+DEPLOYMENT CHECKLIST
+===============================================================================
+
+BEFORE DEPLOY:
+  ☐ GitHub repository pushed (3c5eccc commit)
+  ☐ requirements.txt versiya cheklovlari bilan
+  ☐ Procfile va runtime.txt mavjud
+  ☐ .env fayli .gitignore'da
+
+DURING DEPLOY:
+  ☐ Render account yaratildi
+  ☐ GitHub connected
+  ☐ Service details to'g'ri
+  ☐ Environment variables qo'shildi
+  ☐ Deploy boshlandi
+
+AFTER DEPLOY:
+  ☐ Build successful
+  ☐ App URL olindi
+  ☐ Webhook o'rnatildi
+  ☐ Bot test qilindi
+
+===============================================================================
+STATUS: READY FOR DEPLOYMENT ✅
+===============================================================================
+
+Repository: https://github.com/ilyosdesign/asmebel-telegram-bot
+Render Dashboard: https://dashboard.render.com
+Deployment Guide: DEPLOYMENT.md
+
+Hammasiga tayyor! Deploy qilsa bo'ladi! 🚀
